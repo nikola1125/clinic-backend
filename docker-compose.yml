@@ -1,0 +1,97 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8082:8000"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://clinic:${POSTGRES_PASSWORD}@db:5432/clinic
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  # Caddy is only used for real VPS deployments with a domain. Start it
+  # explicitly with `docker compose --profile prod up -d` when you need TLS.
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["prod"]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: clinic
+      POSTGRES_USER: clinic
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    expose:
+      - "5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clinic"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    expose:
+      - "6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes
+    restart: unless-stopped
+
+  turn:
+    image: coturn/coturn:alpine
+    # Use host networking so coturn sees the host's public IP directly
+    # and relay ports don't need explicit mapping. If you prefer bridged
+    # networking, uncomment the `ports:` block and comment out network_mode.
+    network_mode: host
+    # ports:
+    #   - "3478:3478/tcp"
+    #   - "3478:3478/udp"
+    #   - "5349:5349/tcp"
+    #   - "5349:5349/udp"
+    #   - "49152-49500:49152-49500/udp"
+    command: >
+      turnserver
+      --verbose
+      --listening-port=3478
+      --tls-listening-port=5349
+      --realm=${TURN_REALM:-localhost}
+      --server-name=${TURN_REALM:-localhost}
+      --use-auth-secret
+      --static-auth-secret=${TURN_SECRET}
+      --fingerprint
+      --lt-cred-mech
+      --min-port=49152
+      --max-port=49500
+      --no-cli
+      --no-loopback-peers
+      --no-multicast-peers
+      --log-file=stdout
+      ${TURN_EXTERNAL_IP_FLAG:-}
+      ${TURN_TLS_FLAGS:---no-tls --no-dtls}
+    volumes:
+      - ./certs:/certs:ro
+    env_file: .env
+    restart: unless-stopped
+
+volumes:
+  db_data:
+  caddy_data:
+  caddy_config:

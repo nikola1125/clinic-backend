@@ -1,0 +1,14 @@
+# Replace api.yourdomain.com with your actual API subdomain.
+# Caddy auto-provisions a Let's Encrypt certificate and handles WebSocket
+# upgrades transparently.
+
+api.yourdomain.com {
+	encode gzip
+
+	reverse_proxy api:8000 {
+		# Forward client IP so the backend's rate limiter keys correctly
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+	}
+}
