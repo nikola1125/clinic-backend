@@ -1,3 +1,4 @@
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -6,6 +7,18 @@ class Settings(BaseSettings):
 
     database_url: str
     redis_url: str
+
+    @model_validator(mode="after")
+    def _normalise_urls(self) -> "Settings":
+        # Railway / Heroku inject plain postgres:// or postgresql:// — psycopg3
+        # requires the postgresql+psycopg:// driver prefix.
+        url = self.database_url
+        if url.startswith("postgres://"):
+            url = "postgresql+psycopg://" + url[len("postgres://"):]
+        elif url.startswith("postgresql://"):
+            url = "postgresql+psycopg://" + url[len("postgresql://"):]
+        self.database_url = url
+        return self
 
     cors_origins: str = "http://localhost:3000"
 
