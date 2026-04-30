@@ -1,0 +1,32 @@
+# Never bake secrets into the image
+.env
+.env.*
+
+# Git & IDE
+.git
+.gitignore
+.vscode
+.idea
+
+# Python cache
+__pycache__
+*.py[cod]
+*.pyo
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Local DB data / certs
+db/data
+certs/
+
+# Docker files (not needed inside image)
+docker-compose.yml
+docker-compose.*.yml
+Dockerfile*
+.dockerignore
+
+# Docs / misc
+*.md
+*.txt
+!requirements.txt

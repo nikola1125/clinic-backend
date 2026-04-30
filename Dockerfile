@@ -1,5 +1,7 @@
 FROM python:3.12-slim
 
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+
 WORKDIR /app
 
 COPY requirements.txt /app/requirements.txt
@@ -9,8 +11,11 @@ COPY app /app/app
 COPY alembic /app/alembic
 COPY alembic.ini /app/alembic.ini
 
+RUN chown -R appuser:appgroup /app
+USER appuser
+
 ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]
