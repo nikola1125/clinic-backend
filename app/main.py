@@ -12,10 +12,9 @@ from app.db.models import User
 from app.core.security import hash_password
 from app.routers import admin, applications, contact, doctor, public, auth, registry, triage, websocket
 
-
 # ---------------------------------------------------------------------------
 # Security headers middleware
-# ---------------------------------------------------------------------------
+# --------------     ------------------------------------------------------------
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -23,7 +22,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"  
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         return response
