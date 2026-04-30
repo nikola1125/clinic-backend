@@ -357,7 +357,7 @@ async def signaling_endpoint(websocket: WebSocket, appointment_id: str):
 
 
 @router.get("/turn-credentials", dependencies=[Depends(rate_limit)])
-def get_turn_credentials(actor: Actor = Depends(get_actor)):
+async def get_turn_credentials(actor: Actor = Depends(get_actor)):
     """Return TURN credentials for the authenticated client.
 
     Two modes (selected via `TURN_MODE` env var):
@@ -372,6 +372,41 @@ def get_turn_credentials(actor: Actor = Depends(get_actor)):
         raise HTTPException(status_code=401, detail="Authentication required")
 
     mode = (settings.turn_mode or "hmac").lower()
+
+    if mode == "metered":
+        import httpx
+        secret = settings.turn_metered_secret_key
+        domain = settings.turn_metered_domain
+        if not secret or not domain:
+            raise HTTPException(status_code=500, detail="TURN_METERED_SECRET_KEY / TURN_METERED_DOMAIN not set")
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                cred_resp = await client.post(
+                    f"https://{domain}/api/v1/turn/credential?secretKey={secret}",
+                    json={"expiryInSeconds": settings.turn_ttl_seconds, "label": "clinic"},
+                )
+                cred = cred_resp.json()
+                api_key = cred["apiKey"]
+                ice_resp = await client.get(
+                    f"https://{domain}/api/v1/turn/credentials?apiKey={api_key}"
+                )
+                ice_servers = ice_resp.json()
+            # Normalise to our wire format
+            uris, username, credential = [], "", ""
+            for s in ice_servers:
+                urls = s.get("urls")
+                if not urls:
+                    continue
+                if isinstance(urls, list):
+                    uris.extend(urls)
+                else:
+                    uris.append(urls)
+                if not username and s.get("username"):
+                    username = s["username"]
+                    credential = s.get("credential", "")
+            return {"username": username, "password": credential, "ttl": settings.turn_ttl_seconds, "uris": uris, "realm": domain}
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Failed to fetch Metered TURN credentials: {exc}")
 
     if mode == "static":
         uris = [u.strip() for u in settings.turn_static_uris.split(",") if u.strip()]

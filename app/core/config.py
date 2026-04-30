@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     #       "static" (external provider like Metered with fixed credentials)
     turn_mode: str = "hmac"
 
+    # "metered" mode: dynamic expiring credentials via Metered TURN API.
+    turn_metered_secret_key: str = ""
+    turn_metered_domain: str = ""  # e.g. mjekon.metered.live
+
     # "hmac" mode: shared secret must match coturn --static-auth-secret.
     turn_secret: str = ""
 
