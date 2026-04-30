@@ -38,15 +38,18 @@ async def lifespan(app: FastAPI):
     db = SessionLocal()
     try:
         admin_email = settings.admin_seed_email
+        hashed = hash_password(settings.admin_seed_password)
         existing = db.scalar(select(User).where(User.email == admin_email))
         if not existing:
-            admin_user = User(
-                email=admin_email,
-                hashed_pw=hash_password(settings.admin_seed_password),
-                role="admin",
-            )
-            db.add(admin_user)
-            db.commit()
+            db.add(User(email=admin_email, hashed_pw=hashed, role="admin"))
+            print(f"[seed] Created admin user: {admin_email}", flush=True)
+        else:
+            # Always sync the password so env-var changes take effect on redeploy.
+            existing.hashed_pw = hashed
+            print(f"[seed] Admin user already exists, password synced: {admin_email}", flush=True)
+        db.commit()
+    except Exception as exc:
+        print(f"[seed] ERROR during admin seed: {exc}", flush=True)
     finally:
         db.close()
     yield
