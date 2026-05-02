@@ -70,9 +70,6 @@ class Patient(Base):
     full_name = Column(Text, nullable=False)
     email = Column(Text, nullable=False)
     phone = Column(Text)
-    notes = Column(ARRAY(Text), nullable=False, default=list)
-    medicines = Column(ARRAY(Text), nullable=False, default=list)
-    prescriptions = Column(ARRAY(Text), nullable=False, default=list)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 

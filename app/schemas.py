@@ -53,9 +53,6 @@ class PatientOut(BaseModel):
     full_name: str
     email: str
     phone: str | None
-    notes: list[str]
-    medicines: list[str]
-    prescriptions: list[str]
     created_at: datetime
 
 
