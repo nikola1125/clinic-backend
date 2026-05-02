@@ -12,7 +12,7 @@ COPY alembic /app/alembic
 COPY alembic.ini /app/alembic.ini
 COPY start.sh /app/start.sh
 
-RUN chmod +x /app/start.sh && chown -R appuser:appgroup /app
+RUN sed -i 's/\r$//' /app/start.sh && chmod +x /app/start.sh && chown -R appuser:appgroup /app
 USER appuser
 
 ENV PYTHONUNBUFFERED=1
