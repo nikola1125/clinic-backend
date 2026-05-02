@@ -455,24 +455,19 @@ async def get_turn_credentials(actor: Actor = Depends(get_actor)):
     mode = (settings.turn_mode or "hmac").lower()
 
     if mode == "metered":
-        import httpx
-        secret = settings.turn_metered_secret_key
+        import httpx, logging
+        logger = logging.getLogger("turn")
+        api_key = settings.turn_metered_secret_key
         domain = settings.turn_metered_domain
-        if not secret or not domain:
+        if not api_key or not domain:
             raise HTTPException(status_code=500, detail="TURN_METERED_SECRET_KEY / TURN_METERED_DOMAIN not set")
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
-                cred_resp = await client.post(
-                    f"https://{domain}/api/v1/turn/credential?secretKey={secret}",
-                    json={"expiryInSeconds": settings.turn_ttl_seconds, "label": "clinic"},
-                )
-                cred = cred_resp.json()
-                api_key = cred["apiKey"]
                 ice_resp = await client.get(
                     f"https://{domain}/api/v1/turn/credentials?apiKey={api_key}"
                 )
+                ice_resp.raise_for_status()
                 ice_servers = ice_resp.json()
-            # Normalise to our wire format
             uris, username, credential = [], "", ""
             for s in ice_servers:
                 urls = s.get("urls")
@@ -487,7 +482,8 @@ async def get_turn_credentials(actor: Actor = Depends(get_actor)):
                     credential = s.get("credential", "")
             return {"username": username, "password": credential, "ttl": settings.turn_ttl_seconds, "uris": uris, "realm": domain}
         except Exception as exc:
-            raise HTTPException(status_code=500, detail=f"Failed to fetch Metered TURN credentials: {exc}")
+            logger.warning("Metered TURN fetch failed, falling back to STUN-only: %s", exc)
+            return {"username": "", "password": "", "ttl": 0, "uris": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"], "realm": ""}
 
     if mode == "static":
         uris = [u.strip() for u in settings.turn_static_uris.split(",") if u.strip()]
