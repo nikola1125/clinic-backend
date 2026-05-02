@@ -88,9 +88,6 @@ class SetStatus(BaseModel):
     status: Literal["pending", "accepted", "rejected", "completed"]
 
 
-class PatientEntry(BaseModel):
-    kind: Literal["notes", "medicines", "prescriptions"]
-    value: str = Field(max_length=2000)
 
 
 class RevenueResponse(BaseModel):

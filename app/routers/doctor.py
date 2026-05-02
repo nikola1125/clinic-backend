@@ -10,7 +10,7 @@ from app.db.models import (
     Diagnosis, PatientDocument, DoctorAvailability, Meeting, DoctorPatientLink,
 )
 from app.schemas import (
-    PatientOut, PatientEntry, AppointmentOut, SetStatus,
+    PatientOut, AppointmentOut, SetStatus,
     AppointmentCreate, ChatMessageCreate, ChatMessageOut,
     MedicalProfileUpdate, MedicalProfileOut,
     MedicalNoteCreate, MedicalNoteUpdate, MedicalNoteOut,
@@ -55,7 +55,7 @@ def _get_patient_or_404(db, patient_id: str, doctor_id: str) -> Patient:
 def list_patients(actor=Depends(require_doctor)):
     with db_session() as db:
         _set_doctor_rls(db, actor.doctor_id)
-        # Primary patients (old FK) — still the majority
+        # Primary patients (old FK)
         primary_ids = {
             str(r.id)
             for r in db.query(Patient.id).filter(Patient.doctor_id == actor.doctor_id).all()
@@ -68,28 +68,20 @@ def list_patients(actor=Depends(require_doctor)):
                 DoctorPatientLink.status == "active",
             ).all()
         }
-        all_ids = primary_ids | linked_ids
+        # Patients who have appointments with this doctor
+        appt_patient_ids = {
+            str(r.patient_id)
+            for r in db.query(Appointment.patient_id).filter(
+                Appointment.doctor_id == actor.doctor_id
+            ).all()
+        }
+        all_ids = primary_ids | linked_ids | appt_patient_ids
         if not all_ids:
             return []
         from sqlalchemy import or_
         return db.query(Patient).filter(
             Patient.id.in_(all_ids)
         ).order_by(Patient.full_name).all()
-
-
-@router.post("/patients/{patient_id}/entries", response_model=PatientOut)
-def add_patient_entry(patient_id: str, payload: PatientEntry, actor=Depends(require_doctor)):
-    with db_session() as db:
-        _set_doctor_rls(db, actor.doctor_id)
-        p = db.query(Patient).filter(Patient.id == patient_id).first()
-        if not p:
-            raise HTTPException(status_code=404, detail="Patient not found")
-        arr = getattr(p, payload.kind)
-        setattr(p, payload.kind, [*arr, payload.value])
-        db.add(p)
-        db.commit()
-        db.refresh(p)
-        return p
 
 
 @router.get("/appointments", response_model=list[AppointmentOut])
