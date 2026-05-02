@@ -10,7 +10,7 @@ from sqlalchemy import select
 from app.db.session import SessionLocal
 from app.db.models import User
 from app.core.security import hash_password
-from app.routers import admin, applications, contact, doctor, public, auth, registry, triage, websocket
+from app.routers import admin, applications, contact, doctor, patient, public, auth, registry, triage, websocket
 
 # ---------------------------------------------------------------------------
 # Security headers middleware
@@ -90,6 +90,7 @@ app.include_router(public.router)
 app.include_router(auth.router, prefix="/auth")
 app.include_router(admin.router, prefix="/admin", tags=["admin"])
 app.include_router(doctor.router, prefix="/doctor", tags=["doctor"])
+app.include_router(patient.router, prefix="/patient", tags=["patient"])
 app.include_router(registry.router, prefix="/registry", tags=["registry"])
 app.include_router(triage.router, prefix="/api", tags=["triage"])
 app.include_router(applications.router, prefix="/api/applications", tags=["applications"])

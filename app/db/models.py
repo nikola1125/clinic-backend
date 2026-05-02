@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import BigInteger, Column, DateTime, Enum, Integer, String, Text, ForeignKey, func, Boolean
+from sqlalchemy import BigInteger, Column, Date, DateTime, Enum, Float, Integer, String, Text, ForeignKey, Time, UniqueConstraint, func, Boolean
 from sqlalchemy.dialects.postgresql import UUID, ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, relationship
 
@@ -185,4 +185,149 @@ class ChatMessage(Base):
     sender = Column(Enum("patient", "doctor", name="chat_sender"), nullable=False)
     message = Column(Text, nullable=False)
     image_url = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class MedicalProfile(Base):
+    __tablename__ = "medical_profiles"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    patient_id = Column(UUID(as_uuid=True), ForeignKey("patients.id", ondelete="CASCADE"), nullable=False, unique=True)
+    date_of_birth = Column(Date, nullable=True)
+    gender = Column(Enum("male", "female", "other", name="gender_enum"), nullable=True)
+    blood_type = Column(Text, nullable=True)
+    height_cm = Column(Float, nullable=True)
+    weight_kg = Column(Float, nullable=True)
+    allergies = Column(JSONB, nullable=False, default=list)
+    chronic_conditions = Column(JSONB, nullable=False, default=list)
+    emergency_contact = Column(JSONB, nullable=False, default=dict)
+    insurance_info = Column(JSONB, nullable=False, default=dict)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    updated_by_doctor_id = Column(UUID(as_uuid=True), ForeignKey("doctors.id", ondelete="SET NULL"), nullable=True)
+
+
+class MedicalNote(Base):
+    __tablename__ = "medical_notes"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    patient_id = Column(UUID(as_uuid=True), ForeignKey("patients.id", ondelete="CASCADE"), nullable=False)
+    doctor_id = Column(UUID(as_uuid=True), ForeignKey("doctors.id", ondelete="CASCADE"), nullable=False)
+    appointment_id = Column(UUID(as_uuid=True), ForeignKey("appointments.id", ondelete="SET NULL"), nullable=True)
+    category = Column(Enum("observation", "diagnosis", "follow_up", "general", name="note_category"), nullable=False)
+    content = Column(Text, nullable=False)
+    is_private = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class Prescription(Base):
+    __tablename__ = "prescriptions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    patient_id = Column(UUID(as_uuid=True), ForeignKey("patients.id", ondelete="CASCADE"), nullable=False)
+    doctor_id = Column(UUID(as_uuid=True), ForeignKey("doctors.id", ondelete="CASCADE"), nullable=False)
+    appointment_id = Column(UUID(as_uuid=True), ForeignKey("appointments.id", ondelete="SET NULL"), nullable=True)
+    medication_name = Column(Text, nullable=False)
+    dosage = Column(Text, nullable=False)
+    frequency = Column(Text, nullable=False)
+    duration_days = Column(Integer, nullable=True)
+    refills_remaining = Column(Integer, nullable=False, default=0)
+    instructions = Column(Text, nullable=True)
+    status = Column(Enum("active", "expired", "cancelled", name="prescription_status"), nullable=False, default="active")
+    issued_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class ActiveMedication(Base):
+    __tablename__ = "active_medications"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    patient_id = Column(UUID(as_uuid=True), ForeignKey("patients.id", ondelete="CASCADE"), nullable=False)
+    doctor_id = Column(UUID(as_uuid=True), ForeignKey("doctors.id", ondelete="CASCADE"), nullable=False)
+    name = Column(Text, nullable=False)
+    dosage = Column(Text, nullable=False)
+    frequency = Column(Text, nullable=False)
+    started_at = Column(DateTime(timezone=True), nullable=False)
+    ends_at = Column(DateTime(timezone=True), nullable=True)
+    status = Column(Enum("active", "stopped", name="medication_status"), nullable=False, default="active")
+    notes = Column(Text, nullable=True)
+
+
+class Diagnosis(Base):
+    __tablename__ = "diagnoses"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    patient_id = Column(UUID(as_uuid=True), ForeignKey("patients.id", ondelete="CASCADE"), nullable=False)
+    doctor_id = Column(UUID(as_uuid=True), ForeignKey("doctors.id", ondelete="CASCADE"), nullable=False)
+    appointment_id = Column(UUID(as_uuid=True), ForeignKey("appointments.id", ondelete="SET NULL"), nullable=True)
+    icd_code = Column(Text, nullable=True)
+    description = Column(Text, nullable=False)
+    severity = Column(Enum("mild", "moderate", "severe", name="diagnosis_severity"), nullable=True)
+    status = Column(Enum("active", "resolved", "chronic", name="diagnosis_status"), nullable=False)
+    diagnosed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class PatientDocument(Base):
+    __tablename__ = "patient_documents"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    patient_id = Column(UUID(as_uuid=True), ForeignKey("patients.id", ondelete="CASCADE"), nullable=False)
+    doctor_id = Column(UUID(as_uuid=True), ForeignKey("doctors.id", ondelete="SET NULL"), nullable=True)
+    title = Column(Text, nullable=False)
+    file_url = Column(Text, nullable=False)
+    file_type = Column(Text, nullable=False)
+    category = Column(Enum("lab", "imaging", "report", "prescription", "other", name="document_category"), nullable=False)
+    uploaded_by = Column(Enum("doctor", "patient", name="document_uploader"), nullable=False)
+    uploaded_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class DoctorPatientLink(Base):
+    __tablename__ = "doctor_patient_links"
+    __table_args__ = (UniqueConstraint("doctor_id", "patient_id", name="uq_doctor_patient"),)
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    doctor_id = Column(UUID(as_uuid=True), ForeignKey("doctors.id", ondelete="CASCADE"), nullable=False)
+    patient_id = Column(UUID(as_uuid=True), ForeignKey("patients.id", ondelete="CASCADE"), nullable=False)
+    is_primary = Column(Boolean, nullable=False, default=True)
+    status = Column(Enum("active", "inactive", name="link_status"), nullable=False, default="active")
+    linked_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class DoctorAvailability(Base):
+    __tablename__ = "doctor_availability"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    doctor_id = Column(UUID(as_uuid=True), ForeignKey("doctors.id", ondelete="CASCADE"), nullable=False)
+    day_of_week = Column(Integer, nullable=False)
+    start_time = Column(Time, nullable=False)
+    end_time = Column(Time, nullable=False)
+    slot_duration_min = Column(Integer, nullable=False, default=30)
+    is_active = Column(Boolean, nullable=False, default=True)
+
+
+class Meeting(Base):
+    __tablename__ = "meetings"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    appointment_id = Column(UUID(as_uuid=True), ForeignKey("appointments.id", ondelete="CASCADE"), nullable=False, unique=True)
+    status = Column(Enum("waiting", "active", "ended", name="meeting_status"), nullable=False, default="waiting")
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    ended_at = Column(DateTime(timezone=True), nullable=True)
+    duration_seconds = Column(Integer, nullable=True)
+    doctor_joined_at = Column(DateTime(timezone=True), nullable=True)
+    patient_joined_at = Column(DateTime(timezone=True), nullable=True)
+    recording_url = Column(Text, nullable=True)
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    type = Column(Text, nullable=False)
+    title = Column(Text, nullable=False)
+    body = Column(Text, nullable=False)
+    read = Column(Boolean, nullable=False, default=False)
+    related_entity_id = Column(UUID(as_uuid=True), nullable=True)
+    related_entity_type = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

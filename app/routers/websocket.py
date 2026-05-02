@@ -11,10 +11,10 @@ from typing import Dict, Optional
 
 from app.core.security import decode_access_token, Actor
 from app.db.session import SessionLocal
-from app.db.models import ChatMessage, Appointment, Doctor, Patient
+from app.db.models import ChatMessage, Appointment, Doctor, Patient, Meeting
 from app.deps import get_actor, rate_limit
 from app.core.config import settings
-from app.schemas import MeetContextOut, AppointmentOut
+from app.schemas import MeetContextOut, MeetContextWithMeetingOut, MeetingOut, AppointmentOut
 
 router = APIRouter()
 
@@ -213,16 +213,12 @@ def save_chat_message(appointment_id: str, sender: str, text: str | None = None,
         db.close()
 
 
-@router.get("/meet/context/{appointment_id}", response_model=MeetContextOut, dependencies=[Depends(rate_limit)])
+@router.get("/meet/context/{appointment_id}", response_model=MeetContextWithMeetingOut, dependencies=[Depends(rate_limit)])
 async def get_meet_context(
     appointment_id: str,
     actor: Actor | None = Depends(get_actor),
 ):
-    """Return appointment + resolved role for the authenticated user.
-
-    Use this so the client does not rely on `?role=` (easy to get wrong — doctor
-    must send the doctor JWT, patient the patient JWT).
-    """
+    """Return appointment + resolved role + meeting state for the authenticated user."""
     if not actor:
         raise HTTPException(status_code=401, detail="Authentication required")
 
@@ -246,13 +242,98 @@ async def get_meet_context(
 
         doc = db.scalar(select(Doctor).where(Doctor.id == appt.doctor_id))
         pat = db.scalar(select(Patient).where(Patient.id == appt.patient_id))
+        meeting = db.scalar(select(Meeting).where(Meeting.appointment_id == appointment_id))
 
-        return MeetContextOut(
+        return MeetContextWithMeetingOut(
             role=role,
             appointment=AppointmentOut.model_validate(appt),
             doctor_name=doc.name if doc else "Doctor",
             patient_full_name=pat.full_name if pat else "Patient",
+            meeting=MeetingOut.model_validate(meeting) if meeting else None,
         )
+    finally:
+        db.close()
+
+
+@router.post("/meet/{appointment_id}/join", response_model=MeetingOut, dependencies=[Depends(rate_limit)])
+async def join_meeting(
+    appointment_id: str,
+    actor: Actor | None = Depends(get_actor),
+):
+    """Record that doctor or patient has joined. Transitions meeting to active when both have joined."""
+    if not actor:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    db = SessionLocal()
+    try:
+        appt = db.scalar(select(Appointment).where(Appointment.id == appointment_id))
+        if not appt:
+            raise HTTPException(status_code=404, detail="Appointment not found")
+
+        is_doctor = actor.role == "doctor" and str(appt.doctor_id) == actor.doctor_id
+        is_patient = actor.role == "patient" and str(appt.patient_id) == actor.patient_id
+        if not is_doctor and not is_patient:
+            raise HTTPException(status_code=403, detail="Not a participant in this appointment")
+
+        meeting = db.scalar(select(Meeting).where(Meeting.appointment_id == appointment_id))
+        if not meeting:
+            meeting = Meeting(appointment_id=appointment_id)
+            db.add(meeting)
+
+        now = datetime.now(timezone.utc)
+        if is_doctor and not meeting.doctor_joined_at:
+            meeting.doctor_joined_at = now
+        if is_patient and not meeting.patient_joined_at:
+            meeting.patient_joined_at = now
+
+        if meeting.doctor_joined_at and meeting.patient_joined_at and meeting.status == "waiting":
+            meeting.status = "active"
+            if not meeting.started_at:
+                meeting.started_at = now
+
+        db.commit()
+        db.refresh(meeting)
+        return MeetingOut.model_validate(meeting)
+    finally:
+        db.close()
+
+
+@router.post("/meet/{appointment_id}/end", response_model=MeetingOut, dependencies=[Depends(rate_limit)])
+async def end_meeting_ws(
+    appointment_id: str,
+    actor: Actor | None = Depends(get_actor),
+):
+    """Mark meeting as ended and compute duration."""
+    if not actor:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    db = SessionLocal()
+    try:
+        appt = db.scalar(select(Appointment).where(Appointment.id == appointment_id))
+        if not appt:
+            raise HTTPException(status_code=404, detail="Appointment not found")
+
+        is_doctor = actor.role == "doctor" and str(appt.doctor_id) == actor.doctor_id
+        is_patient = actor.role == "patient" and str(appt.patient_id) == actor.patient_id
+        if not is_doctor and not is_patient:
+            raise HTTPException(status_code=403, detail="Not a participant in this appointment")
+
+        meeting = db.scalar(select(Meeting).where(Meeting.appointment_id == appointment_id))
+        if not meeting:
+            raise HTTPException(status_code=404, detail="Meeting not found")
+
+        now = datetime.now(timezone.utc)
+        meeting.status = "ended"
+        meeting.ended_at = now
+        if meeting.started_at:
+            started = meeting.started_at
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=timezone.utc)
+            meeting.duration_seconds = int((now - started).total_seconds())
+
+        db.commit()
+        db.refresh(meeting)
+        return MeetingOut.model_validate(meeting)
     finally:
         db.close()
 

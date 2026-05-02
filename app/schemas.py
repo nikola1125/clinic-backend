@@ -1,5 +1,5 @@
-from datetime import datetime
-from typing import Annotated, Literal
+from datetime import date, datetime, time
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, field_validator
@@ -46,6 +46,8 @@ class PatientCreate(BaseModel):
 
 
 class PatientOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     doctor_id: UUID | None
     full_name: str
@@ -239,3 +241,251 @@ class PartnerApplicationOut(BaseModel):
     reference: str
 
     model_config = {"from_attributes": True}
+
+
+# ── Medical Profile ──────────────────────────────────────────────────────────
+
+class MedicalProfileUpdate(BaseModel):
+    date_of_birth: date | None = None
+    gender: Literal["male", "female", "other"] | None = None
+    blood_type: str | None = Field(default=None, max_length=10)
+    height_cm: float | None = None
+    weight_kg: float | None = None
+    allergies: list[Any] = Field(default_factory=list)
+    chronic_conditions: list[Any] = Field(default_factory=list)
+    emergency_contact: dict[str, Any] = Field(default_factory=dict)
+    insurance_info: dict[str, Any] = Field(default_factory=dict)
+
+
+class MedicalProfileOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    patient_id: UUID
+    date_of_birth: date | None
+    gender: str | None
+    blood_type: str | None
+    height_cm: float | None
+    weight_kg: float | None
+    allergies: list[Any]
+    chronic_conditions: list[Any]
+    emergency_contact: dict[str, Any]
+    insurance_info: dict[str, Any]
+    updated_at: datetime
+    updated_by_doctor_id: UUID | None
+
+
+# ── Medical Note ─────────────────────────────────────────────────────────────
+
+class MedicalNoteCreate(BaseModel):
+    appointment_id: UUID | None = None
+    category: Literal["observation", "diagnosis", "follow_up", "general"]
+    content: str = Field(min_length=1, max_length=10000)
+    is_private: bool = False
+
+
+class MedicalNoteUpdate(BaseModel):
+    category: Literal["observation", "diagnosis", "follow_up", "general"] | None = None
+    content: str | None = Field(default=None, min_length=1, max_length=10000)
+    is_private: bool | None = None
+
+
+class MedicalNoteOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    patient_id: UUID
+    doctor_id: UUID
+    appointment_id: UUID | None
+    category: str
+    content: str
+    is_private: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+# ── Prescription ─────────────────────────────────────────────────────────────
+
+class PrescriptionCreate(BaseModel):
+    appointment_id: UUID | None = None
+    medication_name: str = Field(min_length=1, max_length=300)
+    dosage: str = Field(min_length=1, max_length=100)
+    frequency: str = Field(min_length=1, max_length=200)
+    duration_days: int | None = Field(default=None, ge=1, le=3650)
+    refills_remaining: int = Field(default=0, ge=0)
+    instructions: str | None = Field(default=None, max_length=2000)
+    expires_at: datetime | None = None
+
+
+class PrescriptionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    patient_id: UUID
+    doctor_id: UUID
+    appointment_id: UUID | None
+    medication_name: str
+    dosage: str
+    frequency: str
+    duration_days: int | None
+    refills_remaining: int
+    instructions: str | None
+    status: str
+    issued_at: datetime
+    expires_at: datetime | None
+
+
+class PrescriptionStatusUpdate(BaseModel):
+    status: Literal["active", "expired", "cancelled"]
+
+
+# ── Active Medication ─────────────────────────────────────────────────────────
+
+class ActiveMedicationCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=300)
+    dosage: str = Field(min_length=1, max_length=100)
+    frequency: str = Field(min_length=1, max_length=200)
+    started_at: datetime
+    ends_at: datetime | None = None
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class ActiveMedicationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    patient_id: UUID
+    doctor_id: UUID
+    name: str
+    dosage: str
+    frequency: str
+    started_at: datetime
+    ends_at: datetime | None
+    status: str
+    notes: str | None
+
+
+class MedicationStatusUpdate(BaseModel):
+    status: Literal["active", "stopped"]
+
+
+# ── Diagnosis ─────────────────────────────────────────────────────────────────
+
+class DiagnosisCreate(BaseModel):
+    appointment_id: UUID | None = None
+    icd_code: str | None = Field(default=None, max_length=20)
+    description: str = Field(min_length=1, max_length=5000)
+    severity: Literal["mild", "moderate", "severe"] | None = None
+    status: Literal["active", "resolved", "chronic"]
+    diagnosed_at: datetime | None = None
+
+
+class DiagnosisOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    patient_id: UUID
+    doctor_id: UUID
+    appointment_id: UUID | None
+    icd_code: str | None
+    description: str
+    severity: str | None
+    status: str
+    diagnosed_at: datetime
+
+
+# ── Patient Document ──────────────────────────────────────────────────────────
+
+class PatientDocumentCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=500)
+    file_url: str = Field(min_length=1, max_length=2048)
+    file_type: str = Field(min_length=1, max_length=100)
+    category: Literal["lab", "imaging", "report", "prescription", "other"]
+
+
+class PatientDocumentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    patient_id: UUID
+    doctor_id: UUID | None
+    title: str
+    file_url: str
+    file_type: str
+    category: str
+    uploaded_by: str
+    uploaded_at: datetime
+
+
+# ── Doctor Availability ───────────────────────────────────────────────────────
+
+class AvailabilitySlot(BaseModel):
+    day_of_week: int = Field(ge=0, le=6)
+    start_time: time
+    end_time: time
+    slot_duration_min: int = Field(default=30, ge=5, le=240)
+    is_active: bool = True
+
+
+class AvailabilityOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    doctor_id: UUID
+    day_of_week: int
+    start_time: time
+    end_time: time
+    slot_duration_min: int
+    is_active: bool
+
+
+# ── Meeting ───────────────────────────────────────────────────────────────────
+
+class MeetingOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    appointment_id: UUID
+    status: str
+    started_at: datetime | None
+    ended_at: datetime | None
+    duration_seconds: int | None
+    doctor_joined_at: datetime | None
+    patient_joined_at: datetime | None
+    recording_url: str | None
+
+
+class MeetContextWithMeetingOut(BaseModel):
+    role: Literal["doctor", "patient"]
+    appointment: AppointmentOut
+    doctor_name: str
+    patient_full_name: str
+    meeting: MeetingOut | None
+
+
+# ── Notification ──────────────────────────────────────────────────────────────
+
+class NotificationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    user_id: UUID
+    type: str
+    title: str
+    body: str
+    read: bool
+    related_entity_id: UUID | None
+    related_entity_type: str | None
+    created_at: datetime
+
+
+# ── Patient Me ────────────────────────────────────────────────────────────────
+
+class PatientMe(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    full_name: str
+    email: str
+    phone: str | None
+    created_at: datetime

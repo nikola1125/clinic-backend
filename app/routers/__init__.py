@@ -1,3 +1,3 @@
-from . import admin, applications, doctor, public, registry, triage
+from . import admin, applications, doctor, patient, public, registry, triage
 
-__all__ = ["admin", "applications", "doctor", "public", "registry", "triage"]
+__all__ = ["admin", "applications", "doctor", "patient", "public", "registry", "triage"]
