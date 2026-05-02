@@ -10,12 +10,13 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 COPY app /app/app
 COPY alembic /app/alembic
 COPY alembic.ini /app/alembic.ini
+COPY start.sh /app/start.sh
 
-RUN chown -R appuser:appgroup /app
+RUN chmod +x /app/start.sh && chown -R appuser:appgroup /app
 USER appuser
 
 ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]
+CMD ["/app/start.sh"]
