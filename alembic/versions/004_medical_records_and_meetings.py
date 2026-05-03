@@ -16,13 +16,39 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Create enum types safely (idempotent — ignore if already exists)
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE gender_enum AS ENUM ('male', 'female', 'other');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
+    """)
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE note_category AS ENUM ('observation', 'diagnosis', 'follow_up', 'general');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
+    """)
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE prescription_status AS ENUM ('active', 'expired', 'cancelled');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
+    """)
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE medication_status AS ENUM ('active', 'stopped', 'completed');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
+    """)
+
     # ── medical_profiles ───────────────────────────────────────────────────────
     op.create_table(
         "medical_profiles",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column("patient_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("patients.id", ondelete="CASCADE"), nullable=False, unique=True),
         sa.Column("date_of_birth", sa.Date, nullable=True),
-        sa.Column("gender", sa.Enum("male", "female", "other", name="gender_enum"), nullable=True),
+        sa.Column("gender", postgresql.ENUM("male", "female", "other", name="gender_enum", create_type=False), nullable=True),
         sa.Column("blood_type", sa.Text, nullable=True),
         sa.Column("height_cm", sa.Float, nullable=True),
         sa.Column("weight_kg", sa.Float, nullable=True),
@@ -41,7 +67,7 @@ def upgrade() -> None:
         sa.Column("patient_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("patients.id", ondelete="CASCADE"), nullable=False),
         sa.Column("doctor_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("doctors.id", ondelete="CASCADE"), nullable=False),
         sa.Column("appointment_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("appointments.id", ondelete="SET NULL"), nullable=True),
-        sa.Column("category", sa.Enum("observation", "diagnosis", "follow_up", "general", name="note_category"), nullable=False),
+        sa.Column("category", postgresql.ENUM("observation", "diagnosis", "follow_up", "general", name="note_category", create_type=False), nullable=False),
         sa.Column("content", sa.Text, nullable=False),
         sa.Column("is_private", sa.Boolean, nullable=False, server_default="false"),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
@@ -62,7 +88,7 @@ def upgrade() -> None:
         sa.Column("duration_days", sa.Integer, nullable=True),
         sa.Column("refills_remaining", sa.Integer, nullable=False, server_default="0"),
         sa.Column("instructions", sa.Text, nullable=True),
-        sa.Column("status", sa.Enum("active", "expired", "cancelled", name="prescription_status"), nullable=False, server_default="active"),
+        sa.Column("status", postgresql.ENUM("active", "expired", "cancelled", name="prescription_status", create_type=False), nullable=False, server_default="active"),
         sa.Column("issued_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True),
     )
@@ -79,7 +105,7 @@ def upgrade() -> None:
         sa.Column("frequency", sa.Text, nullable=False),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("ends_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("status", sa.Enum("active", "stopped", name="medication_status"), nullable=False, server_default="active"),
+        sa.Column("status", postgresql.ENUM("active", "stopped", "completed", name="medication_status", create_type=False), nullable=False, server_default="active"),
         sa.Column("notes", sa.Text, nullable=True),
     )
     op.create_index("ix_active_medications_patient_id", "active_medications", ["patient_id"])
