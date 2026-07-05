@@ -7,7 +7,7 @@ import {
   ConnectedSocket,
   MessageBody,
 } from "@nestjs/websockets";
-import { Server, Socket } from "socket.io";
+import { Namespace, Socket } from "socket.io";
 import { WebsocketService } from "./websocket.service";
 import { Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -38,8 +38,10 @@ interface SocketData {
 export class WebsocketGateway
   implements OnGatewayConnection, OnGatewayDisconnect
 {
+  // With a namespaced gateway, Nest injects the Namespace — its socket
+  // map is `sockets` directly (not `sockets.sockets` like the root Server).
   @WebSocketServer()
-  server: Server;
+  server: Namespace;
 
   private readonly logger = new Logger(WebsocketGateway.name);
   private rooms: Map<string, Room> = new Map();
@@ -145,7 +147,7 @@ export class WebsocketGateway
         const staleSocketId = this.getPeerByRole(room, role);
         if (staleSocketId) {
           room.peers.delete(staleSocketId);
-          const staleSocket = this.server.sockets.sockets.get(staleSocketId);
+          const staleSocket = this.server.sockets.get(staleSocketId);
           if (staleSocket) {
             staleSocket.emit("session-evicted", {
               reason: "Another connection for this role was established",
@@ -173,7 +175,7 @@ export class WebsocketGateway
       if (sigPeers.size === 2 && (role === "doctor" || role === "patient")) {
         room.sessionId = crypto.randomUUID();
         for (const [socketId] of sigPeers.entries()) {
-          const socket = this.server.sockets.sockets.get(socketId);
+          const socket = this.server.sockets.get(socketId);
           if (socket) {
             socket.emit("session-ready", {
               session_id: room.sessionId,
@@ -279,7 +281,7 @@ export class WebsocketGateway
     const sigPeers = this.getSignalingPeers(room);
     for (const [socketId] of sigPeers.entries()) {
       if (socketId !== client.id) {
-        const socket = this.server.sockets.sockets.get(socketId);
+        const socket = this.server.sockets.get(socketId);
         if (socket) {
           socket.emit(msgType, payload);
         }
