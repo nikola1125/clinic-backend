@@ -3,6 +3,7 @@ import { ValidationPipe, Logger } from "@nestjs/common";
 import helmet from "helmet";
 import { AppModule } from "./app.module";
 import { AppConfigService } from "./config/config.service";
+import { RedisIoAdapter } from "./common/adapters/redis-io.adapter";
 
 const logger = new Logger("Bootstrap");
 
@@ -39,6 +40,12 @@ async function bootstrap() {
   });
 
   const config = app.get(AppConfigService);
+
+  // Socket.IO events flow through Redis so multiple machines (and machine
+  // restarts) share the same broadcast plane
+  const redisIoAdapter = new RedisIoAdapter(app);
+  redisIoAdapter.connectToRedis(process.env.REDIS_URL!);
+  app.useWebSocketAdapter(redisIoAdapter);
 
   // CORS
   const origins = config.corsOrigins

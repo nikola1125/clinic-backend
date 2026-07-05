@@ -3,6 +3,7 @@ import { AuthService } from "./auth.service";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
+import { RateLimit } from "../../common/decorators/rate-limit.decorator";
 import {
   SyncRequestDto,
   SyncResponseDto,
@@ -18,12 +19,16 @@ import {
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  // bcrypt makes these CPU-heavy — cap them tighter than the global limit
+  // so a login flood cannot starve the rest of the app
   @Post("login")
+  @RateLimit(10)
   async login(@Body() loginDto: any): Promise<TokenResponseDto> {
     return this.authService.login(loginDto);
   }
 
   @Post("register")
+  @RateLimit(10)
   async register(@Body() registerDto: any): Promise<TokenResponseDto> {
     return this.authService.register(registerDto);
   }

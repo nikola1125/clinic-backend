@@ -14,19 +14,22 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { Appointment } from "../../entities/appointment.entity";
 import { Actor } from "../../common/interfaces/actor.interface";
+import { RedisService } from "../../common/services/redis.service";
 import * as crypto from "crypto";
-
-interface Room {
-  appointmentId: string;
-  peers: Map<string, string>; // socketId -> role
-  sessionId: string | null;
-}
 
 interface SocketData {
   actor: Actor;
   appointmentId: string;
   role: string;
 }
+
+// Room state lives in Redis (not process memory) so calls survive machine
+// restarts and work when the app runs on more than one machine:
+//   meet:room:<appointmentId>    hash  socketId -> role
+//   meet:session:<appointmentId> str   active WebRTC session id
+const roomKey = (appointmentId: string) => `meet:room:${appointmentId}`;
+const sessionKey = (appointmentId: string) => `meet:session:${appointmentId}`;
+const ROOM_TTL_SECONDS = 24 * 3600;
 
 @WebSocketGateway({
   cors: {
@@ -44,40 +47,34 @@ export class WebsocketGateway
   server: Namespace;
 
   private readonly logger = new Logger(WebsocketGateway.name);
-  private rooms: Map<string, Room> = new Map();
 
   constructor(
     private readonly websocketService: WebsocketService,
+    private readonly redisService: RedisService,
     @InjectRepository(Appointment)
     private appointmentRepo: Repository<Appointment>,
   ) {}
 
-  private getRoom(appointmentId: string): Room {
-    if (!this.rooms.has(appointmentId)) {
-      this.rooms.set(appointmentId, {
-        appointmentId,
-        peers: new Map(),
-        sessionId: null,
-      });
-    }
-    return this.rooms.get(appointmentId)!;
+  private async getPeers(
+    appointmentId: string,
+  ): Promise<Record<string, string>> {
+    return this.redisService.hgetall(roomKey(appointmentId));
   }
 
-  private getSignalingPeers(room: Room): Map<string, string> {
-    const signaling = new Map<string, string>();
-    for (const [socketId, role] of room.peers.entries()) {
-      if (role === "doctor" || role === "patient") {
-        signaling.set(socketId, role);
-      }
-    }
-    return signaling;
+  private signalingPeers(
+    peers: Record<string, string>,
+  ): Array<[string, string]> {
+    return Object.entries(peers).filter(
+      ([, role]) => role === "doctor" || role === "patient",
+    );
   }
 
-  private getPeerByRole(room: Room, targetRole: string): string | null {
-    for (const [socketId, role] of room.peers.entries()) {
-      if (role === targetRole) {
-        return socketId;
-      }
+  private peerByRole(
+    peers: Record<string, string>,
+    targetRole: string,
+  ): string | null {
+    for (const [socketId, role] of Object.entries(peers)) {
+      if (role === targetRole) return socketId;
     }
     return null;
   }
@@ -140,27 +137,30 @@ export class WebsocketGateway
       const role = actor.role;
       client.data = { actor, appointmentId, role } as SocketData;
 
-      const room = this.getRoom(appointmentId);
+      const rKey = roomKey(appointmentId);
+      let peers = await this.getPeers(appointmentId);
 
-      // Evict stale same-role socket
+      // Evict stale same-role socket (possibly on another machine).
+      // Remove it from the room FIRST so its disconnect handler (hdel
+      // returns 0) cannot tear down the session we mint below.
       if (role === "doctor" || role === "patient") {
-        const staleSocketId = this.getPeerByRole(room, role);
-        if (staleSocketId) {
-          room.peers.delete(staleSocketId);
-          const staleSocket = this.server.sockets.get(staleSocketId);
-          if (staleSocket) {
-            staleSocket.emit("session-evicted", {
-              reason: "Another connection for this role was established",
-            });
-            staleSocket.disconnect();
-          }
+        const staleSocketId = this.peerByRole(peers, role);
+        if (staleSocketId && staleSocketId !== client.id) {
+          await this.redisService.hdel(rKey, staleSocketId);
+          delete peers[staleSocketId];
+          this.server.to(staleSocketId).emit("session-evicted", {
+            reason: "Another connection for this role was established",
+          });
+          this.server.in(staleSocketId).disconnectSockets();
         }
       }
 
-      room.peers.set(client.id, role);
+      await this.redisService.hset(rKey, client.id, role);
+      await this.redisService.expire(rKey, ROOM_TTL_SECONDS);
+      peers[client.id] = role;
 
       // Tell new peer about existing peers
-      for (const [existingSocketId, existingRole] of room.peers.entries()) {
+      for (const [existingSocketId, existingRole] of Object.entries(peers)) {
         if (existingSocketId !== client.id) {
           client.emit("peer-joined", { role: existingRole });
         }
@@ -170,18 +170,24 @@ export class WebsocketGateway
       client.to(appointmentId).emit("peer-joined", { role });
       client.join(appointmentId);
 
-      // If both doctor and patient present, mint fresh session
-      const sigPeers = this.getSignalingPeers(room);
-      if (sigPeers.size === 2 && (role === "doctor" || role === "patient")) {
-        room.sessionId = crypto.randomUUID();
-        for (const [socketId] of sigPeers.entries()) {
-          const socket = this.server.sockets.get(socketId);
-          if (socket) {
-            socket.emit("session-ready", {
-              session_id: room.sessionId,
-              appointment_id: appointmentId,
-            });
-          }
+      // If both doctor and patient present, mint a fresh session. setNx
+      // makes concurrent joins on different machines agree on ONE id.
+      const sigPeers = this.signalingPeers(peers);
+      if (sigPeers.length === 2 && (role === "doctor" || role === "patient")) {
+        const candidate = crypto.randomUUID();
+        await this.redisService.setNx(
+          sessionKey(appointmentId),
+          candidate,
+          ROOM_TTL_SECONDS,
+        );
+        const sessionId = await this.redisService.get(
+          sessionKey(appointmentId),
+        );
+        for (const [socketId] of sigPeers) {
+          this.server.to(socketId).emit("session-ready", {
+            session_id: sessionId,
+            appointment_id: appointmentId,
+          });
         }
       }
 
@@ -194,52 +200,61 @@ export class WebsocketGateway
     }
   }
 
-  handleDisconnect(client: Socket) {
+  async handleDisconnect(client: Socket) {
     const data = client.data as SocketData;
     if (!data || !data.appointmentId) {
       return;
     }
 
     const { appointmentId, role } = data;
-    const room = this.rooms.get(appointmentId);
-    if (!room) {
-      return;
+
+    try {
+      // If we were already evicted (hdel returns 0), the room has moved on —
+      // don't touch the session that belongs to our replacement.
+      const removed = await this.redisService.hdel(
+        roomKey(appointmentId),
+        client.id,
+      );
+      if (removed === 0) {
+        return;
+      }
+
+      if (role === "doctor" || role === "patient") {
+        const endingSession = await this.redisService.get(
+          sessionKey(appointmentId),
+        );
+        if (endingSession) {
+          await this.redisService.del(sessionKey(appointmentId));
+          client.to(appointmentId).emit("session-ended", {
+            session_id: endingSession,
+            role,
+          });
+        }
+      }
+
+      client.to(appointmentId).emit("peer-left", { role });
+
+      const remaining = await this.redisService.hlen(roomKey(appointmentId));
+      if (remaining === 0) {
+        await this.redisService.del(roomKey(appointmentId));
+      }
+
+      this.logger.log(
+        `Client ${client.id} disconnected from appointment ${appointmentId}`,
+      );
+    } catch (error) {
+      this.logger.error(`Disconnect cleanup error: ${error.message}`);
     }
-
-    room.peers.delete(client.id);
-
-    let endingSession: string | null = null;
-    if ((role === "doctor" || role === "patient") && room.sessionId) {
-      endingSession = room.sessionId;
-      room.sessionId = null;
-    }
-
-    if (endingSession) {
-      client.to(appointmentId).emit("session-ended", {
-        session_id: endingSession,
-        role,
-      });
-    }
-
-    client.to(appointmentId).emit("peer-left", { role });
-
-    if (room.peers.size === 0) {
-      this.rooms.delete(appointmentId);
-    }
-
-    this.logger.log(
-      `Client ${client.id} disconnected from appointment ${appointmentId}`,
-    );
   }
 
   @SubscribeMessage("offer")
   handleOffer(@ConnectedSocket() client: Socket, @MessageBody() data: any) {
-    this.relaySignaling(client, data, "offer");
+    return this.relaySignaling(client, data, "offer");
   }
 
   @SubscribeMessage("answer")
   handleAnswer(@ConnectedSocket() client: Socket, @MessageBody() data: any) {
-    this.relaySignaling(client, data, "answer");
+    return this.relaySignaling(client, data, "answer");
   }
 
   @SubscribeMessage("ice-candidate")
@@ -247,27 +262,24 @@ export class WebsocketGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() data: any,
   ) {
-    this.relaySignaling(client, data, "ice-candidate");
+    return this.relaySignaling(client, data, "ice-candidate");
   }
 
-  private relaySignaling(client: Socket, data: any, msgType: string) {
+  private async relaySignaling(client: Socket, data: any, msgType: string) {
     const socketData = client.data as SocketData;
     if (!socketData || !socketData.appointmentId) {
       return;
     }
 
     const { appointmentId, role } = socketData;
-    const room = this.rooms.get(appointmentId);
-    if (!room) {
-      return;
-    }
 
     if (role !== "doctor" && role !== "patient") {
       return;
     }
 
+    const sessionId = await this.redisService.get(sessionKey(appointmentId));
     const msgSession = data.session_id;
-    if (msgSession && msgSession !== room.sessionId) {
+    if (msgSession && msgSession !== sessionId) {
       return;
     }
 
@@ -275,16 +287,13 @@ export class WebsocketGateway
       ...data,
       type: msgType,
       from_role: role,
-      session_id: room.sessionId,
+      session_id: sessionId,
     };
 
-    const sigPeers = this.getSignalingPeers(room);
-    for (const [socketId] of sigPeers.entries()) {
+    const peers = await this.getPeers(appointmentId);
+    for (const [socketId] of this.signalingPeers(peers)) {
       if (socketId !== client.id) {
-        const socket = this.server.sockets.get(socketId);
-        if (socket) {
-          socket.emit(msgType, payload);
-        }
+        this.server.to(socketId).emit(msgType, payload);
       }
     }
   }

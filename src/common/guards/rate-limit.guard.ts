@@ -1,6 +1,8 @@
 import { Injectable, CanActivate, ExecutionContext, HttpException, HttpStatus } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { RedisService } from '../services/redis.service';
 import { AppConfigService } from '../../config/config.service';
+import { RATE_LIMIT_KEY } from '../decorators/rate-limit.decorator';
 import * as ipaddr from 'ipaddr.js';
 
 @Injectable()
@@ -8,6 +10,7 @@ export class RateLimitGuard implements CanActivate {
   constructor(
     private redis: RedisService,
     private config: AppConfigService,
+    private reflector: Reflector,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -31,7 +34,11 @@ export class RateLimitGuard implements CanActivate {
       key = `rl:ip:${ip}:${path}`;
     }
 
-    const limit = this.config.rateLimitPerMinute;
+    const routeLimit = this.reflector.getAllAndOverride<number>(RATE_LIMIT_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    const limit = routeLimit ?? this.config.rateLimitPerMinute;
     const count = await this.redis.incr(key);
 
     if (count === 1) {

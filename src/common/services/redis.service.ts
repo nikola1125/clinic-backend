@@ -58,6 +58,39 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return this.client.keys(pattern);
   }
 
+  /** Set only if the key does not exist. Returns true if this call won. */
+  async setNx(
+    key: string,
+    value: string,
+    expirationSeconds: number,
+  ): Promise<boolean> {
+    const result = await this.client.set(
+      key,
+      value,
+      "EX",
+      expirationSeconds,
+      "NX",
+    );
+    return result === "OK";
+  }
+
+  async hset(key: string, field: string, value: string): Promise<void> {
+    await this.client.hset(key, field, value);
+  }
+
+  /** Returns the number of fields actually removed. */
+  async hdel(key: string, field: string): Promise<number> {
+    return this.client.hdel(key, field);
+  }
+
+  async hgetall(key: string): Promise<Record<string, string>> {
+    return this.client.hgetall(key);
+  }
+
+  async hlen(key: string): Promise<number> {
+    return this.client.hlen(key);
+  }
+
   async flushdb(): Promise<void> {
     await this.client.flushdb();
   }
