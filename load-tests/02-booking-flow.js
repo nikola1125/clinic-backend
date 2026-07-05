@@ -46,10 +46,12 @@ export const options = {
 
 const auth = (t) => ({ headers: { Authorization: `Bearer ${t}`, ...JSON_HEADERS } });
 
-function tomorrowSlot() {
-  const d = new Date(Date.now() + 24 * 3600 * 1000);
-  const date = d.toISOString().slice(0, 10);
+function randomSlot() {
+  // random day 1-13 ahead (test doctor has 14 days of availability),
   // random 15-min slot between 08:00 and 19:45
+  const days = 1 + Math.floor(Math.random() * 13);
+  const d = new Date(Date.now() + days * 24 * 3600 * 1000);
+  const date = d.toISOString().slice(0, 10);
   const slotIdx = Math.floor(Math.random() * 48);
   const totalMin = 8 * 60 + slotIdx * 15;
   const hh = String(Math.floor(totalMin / 60)).padStart(2, "0");
@@ -57,20 +59,24 @@ function tomorrowSlot() {
   return new Date(`${date}T${hh}:${mm}:00Z`).toISOString();
 }
 
-export default function () {
-  const uid = `${__VU}-${__ITER}-${Date.now()}`;
+// Register ONE throwaway patient for the whole run. Auth endpoints are
+// rate-limited to 10/min/IP (by design — bcrypt is CPU-heavy), and all VUs
+// share this machine's IP, so per-iteration registration would be blocked.
+export function setup() {
+  const uid = `setup-${Date.now()}`;
+  const res = http.post(`${BASE}/auth/register`, JSON.stringify({
+    email: `zz-loadtest-${uid}@mjekon-test.com`,
+    password: "LoadTest123!",
+    full_name: `ZZ LoadTest ${uid}`,
+  }), { headers: JSON_HEADERS });
+  if (res.status >= 400) throw new Error(`register failed: HTTP ${res.status}`);
+  return { token: res.json("access_token"), patientId: res.json("patient_id") };
+}
 
-  group("register", () => {
-    const res = http.post(`${BASE}/auth/register`, JSON.stringify({
-      email: `zz-loadtest-${uid}@mjekon-test.com`,
-      password: "LoadTest123!",
-      full_name: `ZZ LoadTest ${uid}`,
-    }), { headers: JSON_HEADERS });
-    check(res, { "register 200/201": (r) => r.status === 200 || r.status === 201 });
-    if (res.status >= 400) return;
+export default function (data) {
+  const { token, patientId } = data;
 
-    const token = res.json("access_token");
-    const patientId = res.json("patient_id");
+  group("lifecycle", () => {
     sleep(1);
 
     group("browse", () => {
@@ -92,8 +98,13 @@ export default function () {
         doctor_id: LT_DOCTOR_ID,
         patient_id: patientId,
         consult_id: LT_CONSULT_ID,
-        scheduled_at: tomorrowSlot(),
-      }), auth(token));
+        scheduled_at: randomSlot(),
+      }), {
+        ...auth(token),
+        // 409 = slot race between virtual patients; expected under load,
+        // must not pollute the http_req_failed metric
+        responseCallback: http.expectedStatuses(200, 201, 409),
+      });
       if (res2.status === 409) {
         bookingConflicts.add(1); // two VUs raced for the slot — expected
       } else {
@@ -126,11 +137,10 @@ export default function () {
       sleep(1);
     }
 
-    group("dashboard + logout", () => {
+    group("dashboard", () => {
+      // no logout here — the token is shared across iterations by design
       check(http.get(`${BASE}/patient/appointments`, auth(token)),
         { "my appointments 200": (r) => r.status === 200 });
-      check(http.post(`${BASE}/auth/logout`, null, auth(token)),
-        { "logout not 5xx": (r) => r.status < 500 });
     });
   });
 

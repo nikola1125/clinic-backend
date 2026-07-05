@@ -11,6 +11,9 @@ primary_region = 'iad'
 [env]
 NODE_ENV = "production"
 PORT = "8080"
+# Fly's proxy reaches the app over the fdaa::/16 private network; trusting it
+# makes the rate limiter key on the real client IP from X-Forwarded-For.
+TRUSTED_PROXIES = "127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fdaa::/16"
 DB_SYNC = "false"
 TURN_MODE = "metered"
 JWT_EXPIRE_MINUTES = "1440"
