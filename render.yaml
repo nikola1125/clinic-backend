@@ -1,0 +1,55 @@
+databases:
+  - name: clinic-db
+    plan: free
+    databaseName: clinic
+    user: clinic
+
+services:
+  - type: redis
+    name: clinic-redis
+    plan: free
+    ipAllowList: []   # only reachable from Render internal network
+
+  - type: web
+    name: clinic-api
+    env: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm ci && npm run build
+    startCommand: node dist/main.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: clinic-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: clinic-redis
+          property: connectionString
+      - key: JWT_EXPIRE_MINUTES
+        value: "1440"
+      - key: JWT_REFRESH_EXPIRE_MINUTES
+        value: "10080"
+      - key: DB_SYNC
+        value: "false"
+      - key: MEETING_SKIP_JOIN_WINDOW_CHECK
+        value: "false"
+      - key: TURN_MODE
+        value: metered
+      # ── Set these manually in the Render dashboard ────────────────────────
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: JWT_REFRESH_SECRET_KEY
+        sync: false
+      - key: ADMIN_SEED_PASSWORD
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false   # set to your Vercel URL e.g. https://mjekon.vercel.app
+      - key: TURN_METERED_DOMAIN
+        sync: false   # from metered.ca dashboard e.g. yourapp.metered.live
+      - key: TURN_METERED_SECRET_KEY
+        sync: false   # from metered.ca dashboard
