@@ -14,6 +14,7 @@ import { AdminService } from "./admin.service";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
+import { CreateDoctorDto } from "./dto/create-doctor.dto";
 
 @Controller("admin")
 @UseGuards(AuthGuard, RolesGuard)
@@ -27,7 +28,7 @@ export class AdminController {
   }
 
   @Post("doctors")
-  async createDoctor(@Body() createDoctorDto: any) {
+  async createDoctor(@Body() createDoctorDto: CreateDoctorDto) {
     return this.adminService.createDoctor(createDoctorDto);
   }
 

@@ -23,9 +23,12 @@ MEETING_SKIP_JOIN_WINDOW_CHECK = "false"
 [http_service]
   internal_port = 8080
   force_https = true
+  # Keep one machine always running so the first request each morning
+  # doesn't pay a cold-start (and so in-flight calls aren't dropped by
+  # the machine stopping while a socket is idle).
   auto_stop_machines = 'stop'
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1
   processes = ['app']
 
 [[vm]]

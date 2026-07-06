@@ -1,3 +1,6 @@
+// Sentry instrumentation MUST load before any other import so it can patch
+// libraries. No-op unless SENTRY_DSN is set.
+import "./instrument";
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe, Logger } from "@nestjs/common";
 import helmet from "helmet";

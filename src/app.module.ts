@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { SentryModule } from "@sentry/nestjs/setup";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { ConfigModule } from "@nestjs/config";
 import { AppConfigModule } from "./config/config.module";
@@ -26,6 +27,9 @@ import { AuditLog } from "./entities/audit-log.entity";
 
 @Module({
   imports: [
+    // No-op unless SENTRY_DSN is set; instrumentation is initialized in
+    // instrument.ts (imported first in main.ts).
+    SentryModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ".env",

@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import * as Sentry from '@sentry/nestjs';
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -48,6 +49,19 @@ export class HttpExceptionFilter implements ExceptionFilter {
         timestamp: new Date().toISOString(),
       }),
     );
+
+    // Report only genuine server errors to Sentry (no-op unless SENTRY_DSN
+    // is set). 4xx are client/validation errors and would just be noise.
+    if (status >= 500) {
+      Sentry.withScope((scope) => {
+        scope.setTag('requestId', String(requestId));
+        scope.setContext('request', {
+          path: request.url,
+          method: request.method,
+        });
+        Sentry.captureException(exception);
+      });
+    }
 
     // Return consistent error response
     response.status(status).json({

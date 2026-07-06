@@ -5,6 +5,8 @@ import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { RateLimit } from "../../common/decorators/rate-limit.decorator";
 import {
+  LoginDto,
+  RegisterDto,
   SyncRequestDto,
   SyncResponseDto,
   AssignRoleRequestDto,
@@ -23,13 +25,13 @@ export class AuthController {
   // so a login flood cannot starve the rest of the app
   @Post("login")
   @RateLimit(10)
-  async login(@Body() loginDto: any): Promise<TokenResponseDto> {
+  async login(@Body() loginDto: LoginDto): Promise<TokenResponseDto> {
     return this.authService.login(loginDto);
   }
 
   @Post("register")
   @RateLimit(10)
-  async register(@Body() registerDto: any): Promise<TokenResponseDto> {
+  async register(@Body() registerDto: RegisterDto): Promise<TokenResponseDto> {
     return this.authService.register(registerDto);
   }
 

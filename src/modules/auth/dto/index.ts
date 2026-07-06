@@ -1,3 +1,5 @@
+export * from './login.dto';
+export * from './register.dto';
 export * from './sync.dto';
 export * from './assign-role.dto';
 export * from './create-staff.dto';
