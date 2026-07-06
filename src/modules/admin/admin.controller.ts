@@ -60,6 +60,11 @@ export class AdminController {
     return this.adminService.listPatients();
   }
 
+  @Patch("patients/:id")
+  async updatePatient(@Param("id") id: string, @Body() body: any) {
+    return this.adminService.updatePatient(id, body);
+  }
+
   @Delete("patients/:id")
   async deletePatient(@Param("id") id: string) {
     return this.adminService.deletePatient(id);

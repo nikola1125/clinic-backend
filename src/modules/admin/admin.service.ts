@@ -366,6 +366,21 @@ export class AdminService {
     return { ...patient, isActive: user?.isActive ?? true };
   }
 
+  async updatePatient(id: string, patch: { fullName?: string; email?: string; phone?: string }) {
+    const patient = await this.patientRepository.findOne({ where: { id } });
+    if (!patient) throw new NotFoundException('Patient not found');
+    if (patch.fullName !== undefined) patient.fullName = patch.fullName;
+    if (patch.email !== undefined) patient.email = patch.email;
+    if (patch.phone !== undefined) patient.phone = patch.phone || null;
+    const saved = await this.patientRepository.save(patient);
+    // sync email on user account too
+    if (patch.email !== undefined) {
+      const user = await this.userRepository.findOne({ where: { patientId: id } });
+      if (user) await this.userRepository.update(user.id, { email: patch.email });
+    }
+    return saved;
+  }
+
   async getPatientNotes(patientId: string) {
     return this.medicalNoteRepository.find({
       where: { patientId },
