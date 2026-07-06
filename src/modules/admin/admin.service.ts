@@ -133,6 +133,16 @@ export class AdminService {
     });
   }
 
+  async deletePatient(id: string) {
+    const patient = await this.patientRepository.findOne({ where: { id } });
+    if (!patient) throw new NotFoundException('Patient not found');
+    await this.patientRepository.update(id, { deletedAt: new Date() });
+    // also deactivate the user account
+    const user = await this.userRepository.findOne({ where: { patientId: id } });
+    if (user) await this.userRepository.update(user.id, { isActive: false });
+    return { message: 'Patient removed successfully' };
+  }
+
   async listConsults() {
     return this.consultRepository.find({
       relations: ["doctor", "patient"],
