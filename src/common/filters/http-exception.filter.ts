@@ -38,17 +38,20 @@ export class HttpExceptionFilter implements ExceptionFilter {
       detail = exception.stack;
     }
 
-    // Log error with context
-    this.logger.error(
-      JSON.stringify({
-        requestId,
-        status,
-        message,
-        path: request.url,
-        method: request.method,
-        timestamp: new Date().toISOString(),
-      }),
-    );
+    // 4xx are client errors — log as warn to reduce noise; 5xx are real problems
+    const logPayload = JSON.stringify({
+      requestId,
+      status,
+      message,
+      path: request.url,
+      method: request.method,
+      timestamp: new Date().toISOString(),
+    });
+    if (status >= 500) {
+      this.logger.error(logPayload);
+    } else {
+      this.logger.warn(logPayload);
+    }
 
     // Report only genuine server errors to Sentry (no-op unless SENTRY_DSN
     // is set). 4xx are client/validation errors and would just be noise.
