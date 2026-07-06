@@ -8,6 +8,12 @@ import { Appointment } from "../../entities/appointment.entity";
 import { User, UserRole } from "../../entities/user.entity";
 import { DoctorApplication } from "../../entities/doctor-application.entity";
 import { Notification, NotificationType } from "../../entities/notification.entity";
+import { MedicalNote } from "../../entities/medical-note.entity";
+import { MedicalProfile } from "../../entities/medical-profile.entity";
+import { Prescription } from "../../entities/prescription.entity";
+import { ActiveMedication } from "../../entities/active-medication.entity";
+import { Diagnosis } from "../../entities/diagnosis.entity";
+import { PatientDocument } from "../../entities/patient-document.entity";
 import { RlsService } from "../../common/services/rls.service";
 import { NotificationsService } from "../notifications/notifications.service";
 
@@ -28,6 +34,18 @@ export class AdminService {
     private doctorAppRepo: Repository<DoctorApplication>,
     @InjectRepository(Notification)
     private notificationRepository: Repository<Notification>,
+    @InjectRepository(MedicalNote)
+    private medicalNoteRepository: Repository<MedicalNote>,
+    @InjectRepository(MedicalProfile)
+    private medicalProfileRepository: Repository<MedicalProfile>,
+    @InjectRepository(Prescription)
+    private prescriptionRepository: Repository<Prescription>,
+    @InjectRepository(ActiveMedication)
+    private activeMedicationRepository: Repository<ActiveMedication>,
+    @InjectRepository(Diagnosis)
+    private diagnosisRepository: Repository<Diagnosis>,
+    @InjectRepository(PatientDocument)
+    private patientDocumentRepository: Repository<PatientDocument>,
     private rlsService: RlsService,
     private dataSource: DataSource,
     private notificationsService: NotificationsService,
@@ -339,5 +357,51 @@ export class AdminService {
     );
     await this.notificationRepository.save(notifications);
     return { sent: filtered.length };
+  }
+
+  async getPatientById(id: string) {
+    const patient = await this.patientRepository.findOne({ where: { id } });
+    if (!patient) throw new NotFoundException('Patient not found');
+    const user = await this.userRepository.findOne({ where: { patientId: id } });
+    return { ...patient, isActive: user?.isActive ?? true };
+  }
+
+  async getPatientNotes(patientId: string) {
+    return this.medicalNoteRepository.find({
+      where: { patientId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async getPatientMedicalProfile(patientId: string) {
+    return this.medicalProfileRepository.findOne({ where: { patientId } });
+  }
+
+  async getPatientPrescriptions(patientId: string) {
+    return this.prescriptionRepository.find({
+      where: { patientId },
+      order: { issuedAt: 'DESC' },
+    });
+  }
+
+  async getPatientMedications(patientId: string) {
+    return this.activeMedicationRepository.find({
+      where: { patientId },
+      order: { startedAt: 'DESC' },
+    });
+  }
+
+  async getPatientDiagnoses(patientId: string) {
+    return this.diagnosisRepository.find({
+      where: { patientId },
+      order: { diagnosedAt: 'DESC' },
+    });
+  }
+
+  async getPatientDocuments(patientId: string) {
+    return this.patientDocumentRepository.find({
+      where: { patientId },
+      order: { uploadedAt: 'DESC' },
+    });
   }
 }

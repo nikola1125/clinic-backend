@@ -65,6 +65,41 @@ export class AdminController {
     return this.adminService.deletePatient(id);
   }
 
+  @Get("patients/:id")
+  async getPatient(@Param("id") id: string) {
+    return this.adminService.getPatientById(id);
+  }
+
+  @Get("patients/:id/notes")
+  async getPatientNotes(@Param("id") id: string) {
+    return this.adminService.getPatientNotes(id);
+  }
+
+  @Get("patients/:id/medical-profile")
+  async getPatientMedicalProfile(@Param("id") id: string) {
+    return this.adminService.getPatientMedicalProfile(id);
+  }
+
+  @Get("patients/:id/prescriptions")
+  async getPatientPrescriptions(@Param("id") id: string) {
+    return this.adminService.getPatientPrescriptions(id);
+  }
+
+  @Get("patients/:id/medications")
+  async getPatientMedications(@Param("id") id: string) {
+    return this.adminService.getPatientMedications(id);
+  }
+
+  @Get("patients/:id/diagnoses")
+  async getPatientDiagnoses(@Param("id") id: string) {
+    return this.adminService.getPatientDiagnoses(id);
+  }
+
+  @Get("patients/:id/documents")
+  async getPatientDocuments(@Param("id") id: string) {
+    return this.adminService.getPatientDocuments(id);
+  }
+
   @Get("consults")
   async listConsults() {
     return this.adminService.listConsults();
