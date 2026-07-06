@@ -12,6 +12,10 @@ import { SecurityService } from '../../common/services/security.service';
 
 @WebSocketGateway({
   namespace: '/notifications',
+  // Send a ping every 25s so Fly.io's proxy (which kills idle TCP after ~60s)
+  // never sees the connection as idle.
+  pingInterval: 25000,
+  pingTimeout: 60000,
   cors: {
     origin: (origin: string, callback: (err: Error | null, allow?: boolean) => void) => {
       const allowed = (process.env.CORS_ORIGINS || '*').split(',').map((s) => s.trim());
