@@ -3,6 +3,7 @@ import {
   UnauthorizedException,
   BadRequestException,
   NotFoundException,
+  ServiceUnavailableException,
   Logger,
   OnApplicationBootstrap,
 } from "@nestjs/common";
@@ -274,10 +275,19 @@ export class AuthService implements OnApplicationBootstrap {
     const familyId = claims.family;
 
     // Check if this refresh token JTI exists in Redis
-    const storedFamily = await this.redisService.get(`rt:${jti}`);
+    let storedFamily: string | null;
+    try {
+      storedFamily = await this.redisService.get(`rt:${jti}`);
+    } catch {
+      // Redis unavailable — can't validate JTI; return 503 so the client
+      // retries rather than treating this as a token-reuse / auth failure.
+      throw new ServiceUnavailableException(
+        "Token store temporarily unavailable — please retry",
+      );
+    }
     if (!storedFamily) {
-      // Token reuse detected — revoke entire family
-      await this.redisService.del(`rt:family:${familyId}`);
+      // JTI not found: genuine token reuse or already-rotated token
+      await this.redisService.del(`rt:family:${familyId}`).catch(() => {});
       throw new UnauthorizedException(
         "Refresh token reuse detected — please log in again",
       );
