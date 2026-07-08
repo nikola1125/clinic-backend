@@ -54,7 +54,7 @@ export class NotificationsGateway
         return;
       }
 
-      const actor = this.securityService.decodeJwt(token);
+      const actor = await this.securityService.verifyJwt(token);
       if (!actor?.sub) {
         client.disconnect();
         return;
