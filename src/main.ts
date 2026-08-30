@@ -79,6 +79,7 @@ async function bootstrap() {
           imgSrc: ["'self'", "data:", "https:"],
         },
       },
+      crossOriginResourcePolicy: false,
       hsts: {
         maxAge: 31536000,
         includeSubDomains: true,
