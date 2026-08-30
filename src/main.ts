@@ -51,12 +51,13 @@ async function bootstrap() {
   app.useWebSocketAdapter(redisIoAdapter);
 
   // CORS
+  const isDev = process.env.NODE_ENV !== "production";
   const origins = config.corsOrigins
     .split(",")
     .map((o) => o.trim())
     .filter(Boolean);
   app.enableCors({
-    origin: origins,
+    origin: isDev ? true : origins,
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: [

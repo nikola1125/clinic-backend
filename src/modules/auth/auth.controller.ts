@@ -24,13 +24,11 @@ export class AuthController {
   // bcrypt makes these CPU-heavy — cap them tighter than the global limit
   // so a login flood cannot starve the rest of the app
   @Post("login")
-  @RateLimit(10)
   async login(@Body() loginDto: LoginDto): Promise<TokenResponseDto> {
     return this.authService.login(loginDto);
   }
 
   @Post("register")
-  @RateLimit(10)
   async register(@Body() registerDto: RegisterDto): Promise<TokenResponseDto> {
     return this.authService.register(registerDto);
   }
