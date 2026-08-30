@@ -50,7 +50,30 @@ async function bootstrap() {
   redisIoAdapter.connectToRedis(process.env.REDIS_URL!);
   app.useWebSocketAdapter(redisIoAdapter);
 
-  // Security headers (before CORS so helmet doesn't override)
+  // CORS — manual middleware to guarantee headers
+  const allowedOrigins = config.corsOrigins
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
+  const isDev = process.env.NODE_ENV !== "production";
+  const allowAll = isDev || allowedOrigins.includes("*");
+
+  const expressApp = app.getHttpAdapter().getInstance();
+  expressApp.use((req: any, res: any, next: any) => {
+    const origin = req.headers.origin;
+    if (allowAll || (origin && allowedOrigins.includes(origin))) {
+      res.setHeader("Access-Control-Allow-Origin", origin || "*");
+    }
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Authorization,Content-Type,X-Request-Id,X-Api-Key");
+    if (req.method === "OPTIONS") {
+      return res.status(204).end();
+    }
+    next();
+  });
+
+  // Security headers
   app.use(
     helmet({
       contentSecurityPolicy: {
@@ -70,25 +93,6 @@ async function bootstrap() {
       },
     }),
   );
-
-  // CORS
-  const isDev = process.env.NODE_ENV !== "production";
-  const origins = config.corsOrigins
-    .split(",")
-    .map((o) => o.trim())
-    .filter(Boolean);
-  const allowAll = isDev || origins.includes("*");
-  app.enableCors({
-    origin: allowAll ? true : origins,
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: [
-      "Authorization",
-      "Content-Type",
-      "X-Request-Id",
-      "X-Api-Key",
-    ],
-  });
 
   // Body size limit (1MB)
   app.use(require("express").json({ limit: "1mb" }));
