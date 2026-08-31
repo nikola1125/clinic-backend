@@ -75,6 +75,11 @@ export class PatientController {
     return this.service.getDiagnoses(actor.patient_id);
   }
 
+  @Get("medications")
+  getMedications(@GetActor() actor: Actor) {
+    return this.service.getMedications(actor.patient_id);
+  }
+
   @Get("documents")
   getDocuments(@GetActor() actor: Actor) {
     return this.service.getDocuments(actor.patient_id);

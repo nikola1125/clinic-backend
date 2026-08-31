@@ -12,6 +12,7 @@ import {
   Notification,
   ChatMessage,
   ChatSender,
+  ActiveMedication,
   User,
 } from "../../entities";
 
@@ -25,6 +26,8 @@ export class PatientService {
     @InjectRepository(MedicalNote) private noteRepo: Repository<MedicalNote>,
     @InjectRepository(Prescription) private rxRepo: Repository<Prescription>,
     @InjectRepository(Diagnosis) private diagRepo: Repository<Diagnosis>,
+    @InjectRepository(ActiveMedication)
+    private medRepo: Repository<ActiveMedication>,
     @InjectRepository(PatientDocument)
     private docRepo: Repository<PatientDocument>,
     @InjectRepository(Notification) private notifRepo: Repository<Notification>,
@@ -106,6 +109,13 @@ export class PatientService {
 
   async getDiagnoses(patientId: string) {
     return this.diagRepo.find({ where: { patientId } });
+  }
+
+  async getMedications(patientId: string) {
+    return this.medRepo.find({
+      where: { patientId, deletedAt: IsNull() },
+      order: { startedAt: "DESC" },
+    });
   }
 
   async getDocuments(patientId: string) {

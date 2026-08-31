@@ -12,6 +12,7 @@ import {
   PatientDocument,
   Notification,
   ChatMessage,
+  ActiveMedication,
   User,
 } from "../../entities";
 
@@ -27,6 +28,7 @@ import {
       PatientDocument,
       Notification,
       ChatMessage,
+      ActiveMedication,
       User,
     ]),
   ],

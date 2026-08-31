@@ -1,9 +1,11 @@
 import {
   IsEmail,
+  IsIn,
   IsOptional,
   IsString,
   MaxLength,
 } from "class-validator";
+import { SPECIALTIES } from "../../../common/specialties";
 
 /**
  * Fields the admin "add doctor" form sends. The global ValidationPipe runs
@@ -30,8 +32,7 @@ export class CreateDoctorDto {
   password?: string;
 
   @IsOptional()
-  @IsString()
-  @MaxLength(200)
+  @IsIn(SPECIALTIES as unknown as string[])
   specialty?: string;
 
   @IsOptional()

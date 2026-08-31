@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, IsNull, DataSource, In } from "typeorm";
 import { randomUUID } from "crypto";
@@ -386,6 +390,8 @@ export class DoctorService {
       where: { id: noteId, patientId },
     });
     if (!note) throw new NotFoundException("Note not found");
+    if (note.doctorId !== userId)
+      throw new ForbiddenException("You can only edit your own records");
     Object.assign(note, noteDto);
     return this.medicalNoteRepository.save(note);
   }
@@ -395,6 +401,8 @@ export class DoctorService {
       where: { id: noteId, patientId },
     });
     if (!note) throw new NotFoundException("Note not found");
+    if (note.doctorId !== userId)
+      throw new ForbiddenException("You can only delete your own records");
     await this.medicalNoteRepository.update(noteId, { deletedAt: new Date() });
     return { success: true };
   }
@@ -433,6 +441,8 @@ export class DoctorService {
       where: { id: rxId, patientId },
     });
     if (!prescription) throw new NotFoundException("Prescription not found");
+    if (prescription.doctorId !== userId)
+      throw new ForbiddenException("You can only edit your own records");
     await this.prescriptionRepository.update(rxId, {
       status: statusDto.status,
     });
@@ -473,6 +483,8 @@ export class DoctorService {
       where: { id: medId, patientId },
     });
     if (!medication) throw new NotFoundException("Medication not found");
+    if (medication.doctorId !== userId)
+      throw new ForbiddenException("You can only edit your own records");
     await this.activeMedicationRepository.update(medId, {
       status: statusDto.status,
     });
