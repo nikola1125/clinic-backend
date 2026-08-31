@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, IsNull, DataSource } from "typeorm";
+import { Repository, IsNull, DataSource, In } from "typeorm";
 import { randomUUID } from "crypto";
 import { Doctor } from "../../entities/doctor.entity";
 import { Patient } from "../../entities/patient.entity";
@@ -193,7 +193,30 @@ export class DoctorService {
       where: { id: userId },
     });
     if (!doctor) throw new NotFoundException("Doctor not found");
-    return this.patientRepository.find();
+
+    // A doctor may only see patients they actually attend: anyone they have an
+    // appointment with, plus anyone explicitly linked to them. Never the full
+    // patient registry.
+    const [appts, links] = await Promise.all([
+      this.appointmentRepository.find({
+        where: { doctorId: doctor.id },
+        select: ["patientId"],
+      }),
+      this.doctorPatientLinkRepository.find({
+        where: { doctorId: doctor.id },
+        select: ["patientId"],
+      }),
+    ]);
+
+    const patientIds = Array.from(
+      new Set([
+        ...appts.map((a) => a.patientId),
+        ...links.map((l) => l.patientId),
+      ]),
+    );
+    if (patientIds.length === 0) return [];
+
+    return this.patientRepository.find({ where: { id: In(patientIds) } });
   }
 
   async getPatient(userId: string, patientId: string) {

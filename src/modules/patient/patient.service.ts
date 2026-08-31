@@ -36,6 +36,20 @@ export class PatientService {
     return this.patientRepo.findOne({ where: { id: patientId } });
   }
 
+  async updateMe(
+    patientId: string,
+    dto: { full_name?: string; phone?: string },
+  ) {
+    const patient = await this.patientRepo.findOne({
+      where: { id: patientId },
+    });
+    if (!patient) throw new NotFoundException("Patient not found");
+    if (dto.full_name !== undefined) patient.fullName = dto.full_name;
+    if (dto.phone !== undefined) patient.phone = dto.phone || null;
+    await this.patientRepo.save(patient);
+    return patient;
+  }
+
   async getAppointments(patientId: string) {
     return this.apptRepo.find({
       where: { patientId },

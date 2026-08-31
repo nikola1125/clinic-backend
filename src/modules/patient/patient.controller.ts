@@ -13,6 +13,7 @@ import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { GetActor } from "../../common/decorators/actor.decorator";
 import { Actor } from "../../common/interfaces/actor.interface";
+import { UpdateMeDto } from "./dto/update-me.dto";
 
 @Controller("patient")
 @UseGuards(AuthGuard, RolesGuard)
@@ -23,6 +24,11 @@ export class PatientController {
   @Get("me")
   getMe(@GetActor() actor: Actor) {
     return this.service.getMe(actor.patient_id);
+  }
+
+  @Patch("me")
+  updateMe(@GetActor() actor: Actor, @Body() dto: UpdateMeDto) {
+    return this.service.updateMe(actor.patient_id, dto);
   }
 
   @Get("appointments")
