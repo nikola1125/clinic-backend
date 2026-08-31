@@ -372,10 +372,16 @@ export class DoctorService {
       where: { id: userId },
     });
     if (!doctor) throw new NotFoundException("Doctor not found");
+    // The DB enum only allows observation/diagnosis/follow_up/general — coerce
+    // anything else (e.g. the appointments page's "consultation") to "general".
+    const validCategories = ["observation", "diagnosis", "follow_up", "general"];
+    const category = validCategories.includes(noteDto.category)
+      ? noteDto.category
+      : "general";
     const note = this.medicalNoteRepository.create({
       patientId,
       doctorId: doctor.id,
-      category: noteDto.category,
+      category,
       content: noteDto.content,
       isPrivate: noteDto.is_private ?? noteDto.isPrivate ?? false,
       appointmentId: noteDto.appointment_id ?? noteDto.appointmentId ?? null,
@@ -430,6 +436,8 @@ export class DoctorService {
     const prescription = this.prescriptionRepository.create({
       patientId,
       doctorId: doctor.id,
+      appointmentId:
+        prescriptionDto.appointment_id ?? prescriptionDto.appointmentId ?? null,
       medicationName:
         prescriptionDto.medication_name ?? prescriptionDto.medicationName,
       dosage: prescriptionDto.dosage,
@@ -486,6 +494,8 @@ export class DoctorService {
     const medication = this.activeMedicationRepository.create({
       patientId,
       doctorId: doctor.id,
+      appointmentId:
+        medicationDto.appointment_id ?? medicationDto.appointmentId ?? null,
       name: medicationDto.name,
       dosage: medicationDto.dosage,
       frequency: medicationDto.frequency,
@@ -534,6 +544,8 @@ export class DoctorService {
     const diagnosis = this.diagnosisRepository.create({
       patientId,
       doctorId: doctor.id,
+      appointmentId:
+        diagnosisDto.appointment_id ?? diagnosisDto.appointmentId ?? null,
       icdCode: diagnosisDto.icd_code ?? diagnosisDto.icdCode ?? null,
       description: diagnosisDto.description,
       severity: diagnosisDto.severity || null,
