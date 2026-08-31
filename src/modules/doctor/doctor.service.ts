@@ -373,9 +373,12 @@ export class DoctorService {
     });
     if (!doctor) throw new NotFoundException("Doctor not found");
     const note = this.medicalNoteRepository.create({
-      ...noteDto,
       patientId,
       doctorId: doctor.id,
+      category: noteDto.category,
+      content: noteDto.content,
+      isPrivate: noteDto.is_private ?? noteDto.isPrivate ?? false,
+      appointmentId: noteDto.appointment_id ?? noteDto.appointmentId ?? null,
     });
     return this.medicalNoteRepository.save(note);
   }
@@ -423,10 +426,23 @@ export class DoctorService {
       where: { id: userId },
     });
     if (!doctor) throw new NotFoundException("Doctor not found");
+    const expiresRaw = prescriptionDto.expires_at ?? prescriptionDto.expiresAt;
     const prescription = this.prescriptionRepository.create({
-      ...prescriptionDto,
       patientId,
       doctorId: doctor.id,
+      medicationName:
+        prescriptionDto.medication_name ?? prescriptionDto.medicationName,
+      dosage: prescriptionDto.dosage,
+      frequency: prescriptionDto.frequency,
+      durationDays:
+        prescriptionDto.duration_days ?? prescriptionDto.durationDays ?? null,
+      refillsRemaining:
+        prescriptionDto.refills_remaining ??
+        prescriptionDto.refillsRemaining ??
+        0,
+      instructions: prescriptionDto.instructions ?? null,
+      expiresAt: expiresRaw ? new Date(expiresRaw) : null,
+      ...(prescriptionDto.status ? { status: prescriptionDto.status } : {}),
     });
     return this.prescriptionRepository.save(prescription);
   }
@@ -465,10 +481,18 @@ export class DoctorService {
       where: { id: userId },
     });
     if (!doctor) throw new NotFoundException("Doctor not found");
+    const startedRaw = medicationDto.started_at ?? medicationDto.startedAt;
+    const endsRaw = medicationDto.ends_at ?? medicationDto.endsAt;
     const medication = this.activeMedicationRepository.create({
-      ...medicationDto,
       patientId,
       doctorId: doctor.id,
+      name: medicationDto.name,
+      dosage: medicationDto.dosage,
+      frequency: medicationDto.frequency,
+      startedAt: startedRaw ? new Date(startedRaw) : new Date(),
+      endsAt: endsRaw ? new Date(endsRaw) : null,
+      notes: medicationDto.notes ?? null,
+      ...(medicationDto.status ? { status: medicationDto.status } : {}),
     });
     return this.activeMedicationRepository.save(medication);
   }
@@ -508,9 +532,12 @@ export class DoctorService {
     });
     if (!doctor) throw new NotFoundException("Doctor not found");
     const diagnosis = this.diagnosisRepository.create({
-      ...diagnosisDto,
       patientId,
       doctorId: doctor.id,
+      icdCode: diagnosisDto.icd_code ?? diagnosisDto.icdCode ?? null,
+      description: diagnosisDto.description,
+      severity: diagnosisDto.severity || null,
+      status: diagnosisDto.status ?? "active",
     });
     return this.diagnosisRepository.save(diagnosis);
   }
@@ -557,18 +584,41 @@ export class DoctorService {
       where: { id: userId },
     });
     if (!doctor) throw new NotFoundException("Doctor not found");
+
+    // Map incoming snake_case (or camelCase) form fields onto entity columns,
+    // coercing empty strings to null so date/enum columns don't blow up.
+    const p = profileDto ?? {};
+    const has = (a: string, b: string) => p[a] !== undefined || p[b] !== undefined;
+    const val = (a: string, b: string) => p[a] ?? p[b];
+    const mapped: Record<string, unknown> = { updatedByDoctorId: doctor.id };
+    if (has("date_of_birth", "dateOfBirth"))
+      mapped.dateOfBirth = val("date_of_birth", "dateOfBirth") || null;
+    if (p.gender !== undefined) mapped.gender = p.gender || null;
+    if (has("blood_type", "bloodType"))
+      mapped.bloodType = val("blood_type", "bloodType") || null;
+    if (has("height_cm", "heightCm"))
+      mapped.heightCm = val("height_cm", "heightCm") ?? null;
+    if (has("weight_kg", "weightKg"))
+      mapped.weightKg = val("weight_kg", "weightKg") ?? null;
+    if (p.allergies !== undefined) mapped.allergies = p.allergies ?? [];
+    if (has("chronic_conditions", "chronicConditions"))
+      mapped.chronicConditions = val("chronic_conditions", "chronicConditions") ?? [];
+    if (has("emergency_contact", "emergencyContact"))
+      mapped.emergencyContact = val("emergency_contact", "emergencyContact") ?? {};
+    if (has("insurance_info", "insuranceInfo"))
+      mapped.insuranceInfo = val("insurance_info", "insuranceInfo") ?? {};
+
     const profile = await this.medicalProfileRepository.findOne({
       where: { patientId },
     });
     if (!profile) {
       const newProfile = this.medicalProfileRepository.create({
-        ...profileDto,
+        ...mapped,
         patientId,
-        updatedByDoctorId: doctor.id,
       });
       return this.medicalProfileRepository.save(newProfile);
     }
-    Object.assign(profile, profileDto, { updatedByDoctorId: doctor.id });
+    Object.assign(profile, mapped);
     return this.medicalProfileRepository.save(profile);
   }
 
